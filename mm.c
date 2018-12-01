@@ -143,6 +143,9 @@ static inline void* PREV_FREEA(void *ptr)
     return ((char*) ptr + WSIZE);
 }
 
+#define NEXT_FREEP(ptr)  (*(char **)((char *)(ptr) + DSIZE))
+#define PREV_FREEP(ptr)  (*(char **)((char * )(ptr)))
+/*
 static inline void* NEXT_FREEP(void *ptr)
 {
     return (*(char**)((char*)(ptr)+DSIZE));
@@ -152,7 +155,7 @@ static inline void* PREV_FREEP(void *ptr)
 {
     return (*(char**)((char*)(ptr)));
 }
-
+*/
 /////////////////////////////////////////////////////////////////////////////
 //
 // Global Variables
@@ -169,8 +172,7 @@ static void *find_fit(uint32_t asize);
 static void *coalesce(void *bp);
 static void printblock(void *bp); 
 static void checkblock(void *bp);
-static void removefblock(void *bp);// removes free blocks
-
+static void removefreeblock(void *bp);
 // mm_init: Before calling mm_malloc mm_realloc or mm_free, the 
 // application program (i.e., the trace-driven driver program that 
 // you will use to evaluate your implementation) calls mm_init 
@@ -182,6 +184,7 @@ int mm_init(void)
 {
     if((heap_listp = mem_sbrk(MINIMUM)) == (void*) -1)
         return -1;
+    
     PUT(heap_listp, 0);                             /* Alignment padding */
     PUT(heap_listp + (1*WSIZE), PACK(MINIMUM, 1));  /* Prologue header */
     
@@ -189,7 +192,7 @@ int mm_init(void)
     PUT(heap_listp + (3*WSIZE), 0);                 /* Next pointer */
     
     PUT(heap_listp + MINIMUM, PACK(MINIMUM, 1));    /* Prologue footer */
-    PUT(heap_listp + MINIMUM + WSIZE, PACK(0, 1))   /* Next pointer */
+    PUT(heap_listp + MINIMUM + WSIZE, PACK(0, 1));   /* Next pointer */
     
     free_listp = heap_listp + DSIZE;
     /* Extend the empty heap with a free block of CHUNKSIZE bytes */
@@ -209,11 +212,15 @@ static void *extend_heap(uint32_t words)
     
     /* Allocate an even number of words to maintain alignment */
     size = (words%2) ? (words+1) * WSIZE : words * WSIZE;
+    if(size < MINIMUM)
+        size = MINIMUM;
+    
     if((long)(bp = mem_sbrk(size)) == -1)
         return NULL;
     
     /* Initialize free block header/footer and the epilogue header */
     PUT(HDRP(bp), PACK(size, 0));           /* Free block header */
+    
     PUT(FTRP(bp), PACK(size, 0));           /* Free block footer */
     PUT(HDRP(NEXT_BLKP(bp)), PACK(0,1));    /* New epilogue header */
     
@@ -232,7 +239,7 @@ static void *find_fit(uint32_t asize)
     /* First-fit search */
     void *bp;
     
-    for(bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_FREEP(bp))
+    for(bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp))
     {
         if(!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp))))
         {
@@ -268,22 +275,22 @@ static void *coalesce(void *bp)
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
     size_t size = GET_SIZE(HDRP(bp));
     
-    if(prev_alloc && next_alloc)\
+    if(prev_alloc && next_alloc)                // all allocated
         return bp;
-    else if(prev_alloc && !next_alloc)
+    else if(prev_alloc && !next_alloc)          // the next isn't allocated
     {
         size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
         PUT(HDRP(bp), PACK(size, 0));
         PUT(FTRP(bp), PACK(size, 0));
     }
-    else if(!prev_alloc && next_alloc)
+    else if(!prev_alloc && next_alloc)          // the previous isn't allocated
     {
         size += GET_SIZE(HDRP(PREV_BLKP(bp)));
         PUT(FTRP(bp), PACK(size, 0));
         PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
         bp = PREV_BLKP(bp);
     }
-    else
+    else                                        // both aren't allocated
     {
         size += GET_SIZE(HDRP(PREV_BLKP(bp))) + GET_SIZE(FTRP(NEXT_BLKP(bp)));
         PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
@@ -345,11 +352,9 @@ static void place(void *bp, uint32_t asize)
     {
         PUT(HDRP(bp), PACK(asize, 1));
         PUT(FTRP(bp), PACK(asize, 1));
-        removefblock(bp);
         bp = NEXT_BLKP(bp);
         PUT(HDRP(bp), PACK(csize - asize, 0));
         PUT(FTRP(bp), PACK(csize - asize, 0));
-        coalesce(bp);
     }
     else
     {
@@ -479,24 +484,25 @@ static void checkblock(void *bp)
     }
 }
 
-static void removefblock(void *bp)
+static void removefreeblock(void* bp)
 {
-    if(free_listp==0)
-        return; // list is empty
-    else if((PREV_FREEP(bp)== NULL) && (NEXT_FREEP(bp)==NULL))
-        free_listp =0;
-    else if((PREV_FREEP(bp)== NULL) && (NEXT_FREEP(bp)!=NULL))
+    if(free_listp == 0)
+        return;
+    
+    if((PREV_FREEP(bp) == NULL) && (NEXT_FREEP(bp) == NULL))
+        free_listp = 0;
+    else if((PREV_FREEP(bp) == NULL) && (NEXT_FREEP(bp) != NULL))
     {
-        free_listp= NEXT_FREEP(bp);
-        PREV_FREEP(bp)= NULL;
+        free_listp = NEXT_FREEP(bp);
+        PREV_FREEP(free_listp) = NULL;
     }
-    else if((PREV_FREEP(bp)!= NULL) && (NEXT_FREEP(bp)==NULL))
+    else if((PREV_FREEP(bp) != NULL) && (NEXT_FREEP(bp)) == NULL)
     {
-        NEXT_FREEP(PREV_FREEP(bp))=NULL;
+        NEXT_FREEP(PREV_FREEP(bp)) = NULL;
     }
-    else if((PREV_FREEP(bp)!= NULL) && (NEXT_FREEP(bp)!=NULL))
+    else if((PREV_FREEP(bp) != NULL) && (NEXT_FREEP(bp) != NULL))
     {
-    PREV_FREEEP(NEXT_FREEP(bp))= PREV_FREEEP(bp);
-    NEXT_FREEP(PREV_FREEP(bp))=NEXT_FREEP(bp);
+        PREV_FREEP(NEXT_FREEP(bp)) = PREV_FREEP(bp);
+        NEXT_FREEP(PREV_FREEP(bp)) = NEXT_FREEP(bp);
     }
 }
