@@ -173,6 +173,7 @@ static void *coalesce(void *bp);
 static void printblock(void *bp); 
 static void checkblock(void *bp);
 static void removefreeblock(void *bp);
+static void insertfreeblock(void* bp);
 // mm_init: Before calling mm_malloc mm_realloc or mm_free, the 
 // application program (i.e., the trace-driven driver program that 
 // you will use to evaluate your implementation) calls mm_init 
@@ -182,7 +183,7 @@ static void removefreeblock(void *bp);
 
 int mm_init(void) 
 {
-    if((heap_listp = mem_sbrk(MINIMUM)) == (void*) -1)
+    if((heap_listp = mem_sbrk(2*MINIMUM)) == (void*) -1)
         return -1;
     
     PUT(heap_listp, 0);                             /* Alignment padding */
@@ -195,9 +196,11 @@ int mm_init(void)
     PUT(heap_listp + MINIMUM + WSIZE, PACK(0, 1));   /* Next pointer */
     
     free_listp = heap_listp + DSIZE;
+    
     /* Extend the empty heap with a free block of CHUNKSIZE bytes */
     if(extend_heap(CHUNKSIZE/WSIZE) == NULL)
         return -1;
+    
     return 0;
 }
 
@@ -208,7 +211,7 @@ int mm_init(void)
 static void *extend_heap(uint32_t words)
 {
     char *bp;
-    size_t size;
+    uint32_t size;
     
     /* Allocate an even number of words to maintain alignment */
     size = (words%2) ? (words+1) * WSIZE : words * WSIZE;
@@ -239,7 +242,7 @@ static void *find_fit(uint32_t asize)
     /* First-fit search */
     void *bp;
     
-    for(bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp))
+    for(bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_FREEP(bp))
     {
         if(!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp))))
         {
@@ -272,6 +275,9 @@ void mm_free(void *bp)
 static void *coalesce(void *bp) 
 {
     size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
+    
+    if(PREV_BLKP(bp) == bp)
+        prev_alloc = 1;
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
     size_t size = GET_SIZE(HDRP(bp));
     
@@ -280,12 +286,14 @@ static void *coalesce(void *bp)
     else if(prev_alloc && !next_alloc)          // the next isn't allocated
     {
         size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
+        removefreeblock(NEXT_BLKP(bp));
         PUT(HDRP(bp), PACK(size, 0));
         PUT(FTRP(bp), PACK(size, 0));
     }
     else if(!prev_alloc && next_alloc)          // the previous isn't allocated
     {
         size += GET_SIZE(HDRP(PREV_BLKP(bp)));
+        removefreeblock(PREV_BLKP(bp));
         PUT(FTRP(bp), PACK(size, 0));
         PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
         bp = PREV_BLKP(bp);
@@ -293,10 +301,14 @@ static void *coalesce(void *bp)
     else                                        // both aren't allocated
     {
         size += GET_SIZE(HDRP(PREV_BLKP(bp))) + GET_SIZE(FTRP(NEXT_BLKP(bp)));
+        removefreeblock(PREV_BLKP(bp));
+        removefreeblock(NEXT_BLKP(bp));
         PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
         PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
         bp = PREV_BLKP(bp);
     }
+    
+    insertfreeblock(bp);
     return bp;
 }
 
@@ -348,7 +360,7 @@ static void place(void *bp, uint32_t asize)
 {
     size_t csize = GET_SIZE(HDRP(bp));
     
-    if((csize - asize) >= (2*DSIZE))
+    if((csize - asize) >= (MINIMUM))
     {
         PUT(HDRP(bp), PACK(asize, 1));
         PUT(FTRP(bp), PACK(asize, 1));
@@ -508,4 +520,21 @@ static void removefreeblock(void* bp)
         PREV_FREEP(NEXT_FREEP(bp)) = PREV_FREEP(bp);
         NEXT_FREEP(PREV_FREEP(bp)) = NEXT_FREEP(bp);
     }
+}
+
+static void insertfreeblock(void* bp)
+{
+    if(free_listp == NULL)
+    {
+        NEXT_FREEP(bp) = NULL;
+        PREV_FREEP(bp) = NULL;
+        free_listp = bp;
+        return;
+    }
+    
+    NEXT_FREEP(bp) = free_listp;
+    PREV_FREEP(bp) = NULL;
+    PREV_FREEP(free_listp) = bp;
+    
+    free_listp = bp;
 }
