@@ -362,6 +362,7 @@ static void place(void *bp, uint32_t asize)
     {
         PUT(HDRP(bp), PACK(csize, 1));
         PUT(FTRP(bp), PACK(csize, 1));
+        removefreeblock(bp);
     }
 }
 
