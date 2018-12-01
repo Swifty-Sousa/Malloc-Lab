@@ -31,6 +31,7 @@
 #include "mm.h"
 #include "memlib.h"
 
+
 /*********************************************************
  * NOTE TO STUDENTS: Before you do anything else, please
  * provide your team information in the following struct.
@@ -62,7 +63,8 @@ team_t team = {
 #define OVERHEAD    8       /* overhead of header and footer (bytes) */
 #define MIN_PAYLOAD 8
 #define PSIZE       4
-#define MINIMUM     (4*WSIZE + MIN_PAYLOAD)
+#define ALIGNMENR   8
+#define MINIMUM     24
 
 static char* free_listp = 0;
 
@@ -261,10 +263,7 @@ static void *find_fit(uint32_t asize)
 void mm_free(void *bp)
 {
     size_t size = GET_SIZE(HDRP(bp));
-    
     PUT(HDRP(bp), PACK(size, 0));
-    
-    
     PUT(FTRP(bp), PACK(size, 0));
     coalesce(bp);
 }
@@ -406,23 +405,35 @@ static void place(void *bp, uint32_t asize)
 
 void *mm_realloc(void *ptr, uint32_t size)
 {
+    uint32_t oldsize, asize;
     void *newp;
-    uint32_t copySize;
 
-    newp = mm_malloc(size);
-    if (newp == NULL)
+    asize= MAX(ALIGN(size) + DSIZE, MINIMUM);
+    if(size==0)
     {
-        printf("ERROR: mm_malloc failed in mm_realloc\n");
-        exit(1);
+        mm_free(ptr);
+        return 0;
     }
-    copySize = GET_SIZE(HDRP(ptr));
-    if (size < copySize)
+    if(ptr==NULL)
     {
-        copySize = size;
+        return mm_malloc(size);
     }
-    memcpy(newp, ptr, copySize);
+    oldsize = GET_SIZE(HDRP(ptr));
+    if(asize==oldsize)
+    {
+        return ptr
+    }
+    newptr = mm_malloc(size);
+    if(!newptr)
+    {
+        return 0;
+    }
+    if(size < oldsize)
+    {
+        memcpy(newptr, ptr, oldsize);
+    }
     mm_free(ptr);
-    return newp;
+    return newptr;
 }
 
 //
