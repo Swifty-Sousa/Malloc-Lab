@@ -1,3 +1,4 @@
+
 /* 
  * mm-implicit.c -  Simple allocator based on implicit free lists, 
  *                  first fit placement, and boundary tag coalescing. 
@@ -37,14 +38,14 @@
 team_t team = {
   /* Team name */
   "",
-  /* First member's full name */
-  "Vince Liu",
-  /* First member's email address */
-  "vili1624@colorado.edu",
-  /* Second member's full name (leave blank if none) */
-  "Christian F. Sousa",
-  /* Second member's email address (leave blank if none) */
-  "chso8299@colorado.edu"
+  /* Vincent Liu */
+  "",
+  /* vili1624@colorado.edu */
+  "",
+  /* Christian Sousa */
+  "",
+  /* chso8299@colorado.edu */
+  ""
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -60,7 +61,8 @@ team_t team = {
 #define CHUNKSIZE  (1<<12)  /* initial heap size (bytes) */
 #define OVERHEAD    8       /* overhead of header and footer (bytes) */
 
-static inline int MAX(int x, int y) {
+static inline int MAX(int x, int y)
+{
   return x > y ? x : y;
 }
 
@@ -69,14 +71,19 @@ static inline int MAX(int x, int y) {
 // We mask of the "alloc" field to insure only
 // the lower bit is used
 //
-static inline uint32_t PACK(uint32_t size, int alloc) {
+static inline uint32_t PACK(uint32_t size, int alloc)
+{
   return ((size) | (alloc & 0x1));
 }
 
 //
 // Read and write a word at address p
 //
-static inline uint32_t GET(void *p) { return  *(uint32_t *)p; }
+static inline uint32_t GET(void *p)
+{ 
+  return  *(uint32_t *)p;
+}
+
 static inline void PUT( void *p, uint32_t val)
 {
   *((uint32_t *)p) = val;
@@ -85,33 +92,39 @@ static inline void PUT( void *p, uint32_t val)
 //
 // Read the size and allocated fields from address p
 //
-static inline uint32_t GET_SIZE( void *p )  { 
+static inline uint32_t GET_SIZE(void *p)
+{ 
   return GET(p) & ~0x7;
 }
 
-static inline int GET_ALLOC( void *p  ) {
+static inline int GET_ALLOC(void *p)
+{
   return GET(p) & 0x1;
 }
 
 //
 // Given block ptr bp, compute address of its header and footer
 //
-static inline void *HDRP(void *bp) {
-
+static inline void *HDRP(void *bp)
+{
   return ( (char *)bp) - WSIZE;
 }
-static inline void *FTRP(void *bp) {
+
+static inline void *FTRP(void *bp)
+{
   return ((char *)(bp) + GET_SIZE(HDRP(bp)) - DSIZE);
 }
 
 //
 // Given block ptr bp, compute address of next and previous blocks
 //
-static inline void *NEXT_BLKP(void *bp) {
+static inline void *NEXT_BLKP(void *bp)
+{
   return  ((char *)(bp) + GET_SIZE(((char *)(bp) - WSIZE)));
 }
 
-static inline void* PREV_BLKP(void *bp){
+static inline void* PREV_BLKP(void *bp)
+{
   return  ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)));
 }
 
@@ -132,15 +145,28 @@ static void *coalesce(void *bp);
 static void printblock(void *bp); 
 static void checkblock(void *bp);
 
-//
-// mm_init - Initialize the memory manager 
-//
+// mm_init: Before calling mm_malloc mm_realloc or mm_free, the 
+// application program (i.e., the trace-driven driver program that 
+// you will use to evaluate your implementation) calls mm_init 
+// to perform any necessary initializations, such as allocating 
+// the initial heap area. The return value should be -1 if there 
+// was a problem in performing the initialization, 0 otherwise.
+
 int mm_init(void) 
 {
-  //
-  // You need to provide this
-  //
-  return 0;
+    if((heap_listp = mem_sbrk(4*WSIZE)) == (void*) -1)
+        return -1;
+    
+    PUT(heap_listp, 0);
+    PUT(heap_listp + (1*WSIZE), PACK(DSIZE, 1));
+    PUT(heap_listp + (2*WSIZE), PACK(DSIZE, 1));
+    PUT(heap_listp + (3*WSIZE), PACK(0,1));
+    
+    heap_listp += (2*WSIZE);
+    
+    if(extend_heap(CHUNKSIZE/WSIZE) == NULL)
+        return -1;
+    return 0;
 }
 
 
@@ -149,10 +175,17 @@ int mm_init(void)
 //
 static void *extend_heap(uint32_t words) 
 {
-  //
-  // You need to provide this
-  //
-  return NULL;
+    char *bp;
+    size_t size;
+    
+    size = (words%2) ? (words+1) * WSIZE : words * WSIZE;
+    if((long)(bp = mem_sbrk(size)) == -1)
+        return NULL
+    
+    PUT(HDRP(bp), PACK(size, 0));
+    PUT(FDRP(bp), PACK(size, 0));
+    PUT(HDRP(NEXT_BLKP(bp)), PACK(0,1));
+    return coalesce(bp);
 }
 
 
@@ -166,14 +199,18 @@ static void *find_fit(uint32_t asize)
   return NULL; /* no fit */
 }
 
-// 
-// mm_free - Free a block 
-//
+// mm_free: The mm_free routine frees the block pointed to by ptr. 
+// It returns nothing. This routine is only guaranteed to work 
+// when the passed pointer (ptr) was returned by an earlier call 
+// to mm_malloc or mm_realloc and has not yet been freed.
+
 void mm_free(void *bp)
 {
-  //
-  // You need to provide this
-  //
+    size_t size = GETSIZE(HDRP(bp));
+    
+    PUT(HDRP(bp), PACK(size, 0));
+    PUT(FDRP(bp), PACK(size, 0));
+    coalesce(bp);
 }
 
 //
@@ -181,18 +218,70 @@ void mm_free(void *bp)
 //
 static void *coalesce(void *bp) 
 {
-  return bp;
+    size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
+    size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
+    size_t size = GET_SIZE(HDRP(bp));
+    
+    if(prev_alloc && next_alloc)\
+        return bp;
+    else if(prev_alloc && !next_alloc)
+    {
+        size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
+        PUT(HDRP(bp), PACK(size, 0));
+        PUT(FTRP(bp), PACK(size, 0));
+    }
+    else if(!prev_alloc && next_alloc)
+    {
+        size += GET_SIZE(HDRP(PREV_BLKP(bp)));
+        PUT(FTRP(bp), PACK(size, 0));
+        PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
+        bp = PREV_BLKP(bp);
+    }
+    else
+    {
+        size += GET_SIZE(HDRP(PREV_BLKP(bp))) + GET_SIZE(FTRP(NEXT_BLKP(bp)));
+        PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
+        PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
+        bp = PREV_BLKP(bp);
+    }
+    return bp;
 }
 
-//
-// mm_malloc - Allocate a block with at least size bytes of payload 
-//
+// mm_malloc: The mm_malloc routine returns a pointer to an allocated 
+// block payload of at least size bytes. The entire allocated block 
+// should lie within the heap region and should not overlap with any
+// other allocated chunk. We will comparing your implementation to the 
+// version of malloc supplied in the standard C library (libc). Since 
+// the libcmalloc always returns payload pointers that are aligned to 8 
+// bytes, your malloc implementation should do likewise and always 
+// return 8-byte aligned pointers.
+
 void *mm_malloc(uint32_t size) 
 {
-  //
-  // You need to provide this
-  //
-  return NULL;
+    size_t asize;
+    size_t extendsize;
+    char* bp;
+    
+    if(size == 0)
+        return NULL
+    
+    if(size <= DSIZE)
+        asize = 2*DSIZE;
+    else
+        asize = DSIZE * ((size + (DSIZE) + (DSIZE - 1)) / DSIZE);
+    
+    if((bp = find_fit(asize)) != NULL)
+    {
+        place(bp, asize);
+        return bp;
+    }
+    
+    extendsize = MAX(asize, CHUNKSIZE);
+    if((bp = extend_heap(extendsize/WSIZE)) == NULL)
+        return NULL
+    
+    place(bp, asize);
+    return bp;
 } 
 
 //
@@ -204,24 +293,49 @@ void *mm_malloc(uint32_t size)
 //
 static void place(void *bp, uint32_t asize)
 {
+
 }
 
-
-//
 // mm_realloc -- implemented for you
-//
+
+// mm_realloc: The mm_realloc routine returns a pointer to an allocated 
+//             region of at least size bytes with the following constraints.
+
+// if ptr is NULL, the call is equivalent to mm_malloc(size);
+
+// if size is equal to zero, the call is equivalent to mm_free(ptr);
+
+/* if ptr is not NULL, it must have been returned by an earlier call to 
+        mm_malloc or mm_realloc. The call tomm_realloc changes the size 
+        of the memory block pointed to by ptr (the {\em old block}) to 
+        size bytes and returns the address of the new block. Notice that 
+        the address of the new block might be the same as the old block, 
+        or it might be different, depending on your implementation, the 
+        amount of internal fragmentation in the old block, and the size 
+        of the realloc request. The contents of the new block are the same 
+        as those of the old ptr block, up to the minimum of the old and new sizes. 
+        Everything else is uninitialized. For example, if the old block is 8 bytes 
+        and the new block is 12 bytes, then the first 8 bytes of the new block are 
+        identical to the first 8 bytes of the old block and the last 4 bytes are 
+        uninitialized. Similarly, if the old block is 8 bytes and the new block 
+        is 4 bytes, then the contents of the new block are identical to the f
+        irst 4 bytes of the old block. 
+*/
+
 void *mm_realloc(void *ptr, uint32_t size)
 {
   void *newp;
   uint32_t copySize;
 
   newp = mm_malloc(size);
-  if (newp == NULL) {
+  if (newp == NULL)
+  {
     printf("ERROR: mm_malloc failed in mm_realloc\n");
     exit(1);
   }
   copySize = GET_SIZE(HDRP(ptr));
-  if (size < copySize) {
+  if (size < copySize)
+  {
     copySize = size;
   }
   memcpy(newp, ptr, copySize);
@@ -280,19 +394,18 @@ static void printblock(void *bp)
     return;
   }
 
-  printf("%p: header: [%d:%c] footer: [%d:%c]\n",
-	 bp, 
-	 (int) hsize, (halloc ? 'a' : 'f'), 
-	 (int) fsize, (falloc ? 'a' : 'f')); 
+  printf("%p: header: [%d:%c] footer: [%d:%c]\n", bp, (int) hsize, (halloc ? 'a' : 'f'), (int) fsize, (falloc ? 'a' : 'f')); 
 }
 
 static void checkblock(void *bp) 
 {
-  if ((uintptr_t)bp % 8) {
+  if ((uintptr_t)bp % 8)
+  {
     printf("Error: %p is not doubleword aligned\n", bp);
   }
-  if (GET(HDRP(bp)) != GET(FTRP(bp))) {
+
+  if (GET(HDRP(bp)) != GET(FTRP(bp)))
+  {
     printf("Error: header does not match footer\n");
   }
 }
-
