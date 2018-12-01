@@ -132,7 +132,10 @@ static inline void* PREV_BLKP(void *bp)
 {
     return  ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)));
 }
-inline void* NEXT_FREEP(ptr) (*(char**)((char*)(ptr)+DSIZE))
+inline void* NEXT_FREEP(ptr) 
+{
+  return(*(char**)((char*)(ptr)+DSIZE))
+}
 inline void* PREV_FREEP(ptr) (*(char**)((char*)(ptr)))
 /////////////////////////////////////////////////////////////////////////////
 //
