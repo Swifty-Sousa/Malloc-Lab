@@ -31,11 +31,6 @@
 #include "mm.h"
 #include "memlib.h"
 
-
-//global variables 
-static char heap_listp=0;
-
-
 /*********************************************************
  * NOTE TO STUDENTS: Before you do anything else, please
  * provide your team information in the following struct.
@@ -132,11 +127,15 @@ static inline void* PREV_BLKP(void *bp)
 {
     return  ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)));
 }
-inline void* NEXT_FREEP(ptr) 
+/*
+static inline void* NEXT_FREEP(void *ptr)
 {
-  return(*(char**)((char*)(ptr)+DSIZE))
+    return (*(char**)((char*)(ptr)+DSIZE));
 }
-inline void* PREV_FREEP(ptr) (*(char**)((char*)(ptr)))
+static inline void* PREV_FREEP(void *ptr)
+{
+    return (*(char**)((char*)(ptr)));
+}*/
 /////////////////////////////////////////////////////////////////////////////
 //
 // Global Variables
@@ -205,13 +204,18 @@ static void *extend_heap(uint32_t words)
 //
 static void *find_fit(uint32_t asize)
 {
-    void *ptr;
-    for(ptr =heap_listp; ptr!=NULL; NEXT_FREEP(ptr))
+    /* First-fit search */
+    void *bp;
+    
+    for(bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp))
     {
-        if(!GET_ALLOC(HDRP(ptr)) && (asize<= GET_SIZE(HDRP(ptr))))
-            return ptr;
+        if(!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp))))
+        {
+            return bp;
+        }
     }
     return NULL;
+//#endif
 }
 
 // mm_free: The mm_free routine frees the block pointed to by ptr. 
@@ -310,7 +314,7 @@ static void place(void *bp, uint32_t asize)
 {
     size_t csize = GET_SIZE(HDRP(bp));
     
-    if((csize - asize) >= (2*WSIZE))
+    if((csize - asize) >= (2*DSIZE))
     {
         PUT(HDRP(bp), PACK(asize, 1));
         PUT(FTRP(bp), PACK(asize, 1));
