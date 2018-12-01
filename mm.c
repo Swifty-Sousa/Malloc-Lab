@@ -128,8 +128,8 @@ static inline void* PREV_BLKP(void *bp)
     return  ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)));
 }
 
-static inline void* NEXT_FREEP(ptr) (*(chr**)((char*)(ptr)+DSIZE))
-static inline void* PREV_FREEP(ptr) (*(chr**)((char*)(ptr)))
+static inline void* NEXT_FREEP(ptr) (*(char**)((char*)(ptr)+DSIZE))
+static inline void* PREV_FREEP(ptr) (*(char**)((char*)(ptr)))
 /////////////////////////////////////////////////////////////////////////////
 //
 // Global Variables
@@ -303,7 +303,7 @@ static void place(void *bp, uint32_t asize)
 {
     size_t csize = GET_SIZE(HDRP(bp));
     
-    if((csize - asize) >= (2*SIZE))
+    if((csize - asize) >= (2*WSIZE))
     {
         PUT(HDRP(bp), PACK(asize, 1));
         PUT(FTRP(bp), PACK(asize, 1));
