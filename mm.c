@@ -169,6 +169,7 @@ static void *find_fit(uint32_t asize);
 static void *coalesce(void *bp);
 static void printblock(void *bp); 
 static void checkblock(void *bp);
+static void removefblock(void *bp);// removes free blocks
 
 // mm_init: Before calling mm_malloc mm_realloc or mm_free, the 
 // application program (i.e., the trace-driven driver program that 
@@ -181,7 +182,6 @@ int mm_init(void)
 {
     if((heap_listp = mem_sbrk(MINIMUM)) == (void*) -1)
         return -1;
-    
     PUT(heap_listp, 0);                             /* Alignment padding */
     PUT(heap_listp + (1*WSIZE), PACK(MINIMUM, 1));  /* Prologue header */
     
@@ -214,7 +214,6 @@ static void *extend_heap(uint32_t words)
     
     /* Initialize free block header/footer and the epilogue header */
     PUT(HDRP(bp), PACK(size, 0));           /* Free block header */
-    
     PUT(FTRP(bp), PACK(size, 0));           /* Free block footer */
     PUT(HDRP(NEXT_BLKP(bp)), PACK(0,1));    /* New epilogue header */
     
@@ -475,5 +474,27 @@ static void checkblock(void *bp)
     if(GET(HDRP(bp)) != GET(FTRP(bp)))
     {
         printf("Error: header does not match footer\n");
+    }
+}
+
+static void removefblock(void *bp)
+{
+    if(free_listp==0)
+        return; // list is empty
+    else if((PREV_FREEP(bp)== NULL) && (NEXT_FREEP(bp)==NULL))
+        free_listp =0;
+    else if((PREV_FREEP(bp)== NULL) && (NEXT_FREEP(bp)!=NULL))
+    {
+        free_listp= NEXT_FREEP(bp);
+        PREV_FREEP(bp)= NULL;
+    }
+    else if((PREV_FREEP(bp)!= NULL) && (NEXT_FREEP(bp)==NULL))
+    {
+        NEXT_FREEP(PREV_FREEP(bp))=NULL;
+    }
+    else if((PREV_FREEP(bp)!= NULL) && (NEXT_FREEP(bp)!=NULL))
+    {
+    PREV_FREEEP(NEXT_FREEP(bp))= PREV_FREEEP(bp);
+    NEXT_FREEP(PREV_FREEP(bp))=NEXT_FREEP(bp);
     }
 }
