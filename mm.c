@@ -232,7 +232,7 @@ static void *find_fit(uint32_t asize)
     /* First-fit search */
     void *bp;
     
-    for(bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp))
+    for(bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_FREEP(bp))
     {
         if(!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp))))
         {
@@ -345,9 +345,11 @@ static void place(void *bp, uint32_t asize)
     {
         PUT(HDRP(bp), PACK(asize, 1));
         PUT(FTRP(bp), PACK(asize, 1));
+        removefblock(bp);
         bp = NEXT_BLKP(bp);
         PUT(HDRP(bp), PACK(csize - asize, 0));
         PUT(FTRP(bp), PACK(csize - asize, 0));
+        coalesce(bp);
     }
     else
     {
