@@ -60,6 +60,11 @@ team_t team = {
 #define DSIZE       8       /* doubleword size (bytes) */
 #define CHUNKSIZE  (1<<12)  /* initial heap size (bytes) */
 #define OVERHEAD    8       /* overhead of header and footer (bytes) */
+#define MIN_PAYLOAD 8
+#define PSIZE       4
+#define MINIMUM     (4*WSIZE + MIN_PAYLOAD)
+
+static char* free_listp = 0;
 
 static inline int MAX(int x, int y)
 {
@@ -118,7 +123,7 @@ static inline void *FTRP(void *bp)
 //
 // Given block ptr bp, compute address of next and previous blocks
 //
-static inline void *NEXT_BLKP(void *bp)
+static inline void* NEXT_BLKP(void *bp)
 {
     return  ((char *)(bp) + GET_SIZE(((char *)(bp) - WSIZE)));
 }
@@ -127,15 +132,27 @@ static inline void* PREV_BLKP(void *bp)
 {
     return  ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)));
 }
-/*
+
+static inline void* NEXT_FREEA(void *ptr)
+{
+    return (char*) ptr;
+}
+
+static inline void* PREV_FREEA(void *ptr)
+{
+    return ((char*) ptr + WSIZE);
+}
+
 static inline void* NEXT_FREEP(void *ptr)
 {
     return (*(char**)((char*)(ptr)+DSIZE));
 }
+
 static inline void* PREV_FREEP(void *ptr)
 {
     return (*(char**)((char*)(ptr)));
-}*/
+}
+
 /////////////////////////////////////////////////////////////////////////////
 //
 // Global Variables
@@ -162,16 +179,20 @@ static void checkblock(void *bp);
 
 int mm_init(void) 
 {
-    if((heap_listp = mem_sbrk(4*WSIZE)) == (void*) -1)
+    if((heap_listp = mem_sbrk(MINIMUM)) == (void*) -1)
         return -1;
     
-    PUT(heap_listp, 0);
-    PUT(heap_listp + (1*WSIZE), PACK(DSIZE, 1));
-    PUT(heap_listp + (2*WSIZE), PACK(DSIZE, 1));
-    PUT(heap_listp + (3*WSIZE), PACK(0,1));
+    PUT(heap_listp, 0);                             /* Alignment padding */
+    PUT(heap_listp + (1*WSIZE), PACK(MINIMUM, 1));  /* Prologue header */
     
-    heap_listp += (2*WSIZE);
+    PUT(heap_listp + (2*WSIZE), 0);                 /* Previous pointer */
+    PUT(heap_listp + (3*WSIZE), 0);                 /* Next pointer */
     
+    PUT(heap_listp + MINIMUM, PACK(MINIMUM, 1));    /* Prologue footer */
+    PUT(heap_listp + MINIMUM + WSIZE, PACK(0, 1))   /* Next pointer */
+    
+    free_listp = heap_listp + DSIZE;
+    /* Extend the empty heap with a free block of CHUNKSIZE bytes */
     if(extend_heap(CHUNKSIZE/WSIZE) == NULL)
         return -1;
     return 0;
@@ -181,18 +202,23 @@ int mm_init(void)
 //
 // extend_heap - Extend heap with free block and return its block pointer
 //
-static void *extend_heap(uint32_t words) 
+static void *extend_heap(uint32_t words)
 {
     char *bp;
     size_t size;
     
+    /* Allocate an even number of words to maintain alignment */
     size = (words%2) ? (words+1) * WSIZE : words * WSIZE;
     if((long)(bp = mem_sbrk(size)) == -1)
         return NULL;
     
-    PUT(HDRP(bp), PACK(size, 0));
-    PUT(FTRP(bp), PACK(size, 0));
-    PUT(HDRP(NEXT_BLKP(bp)), PACK(0,1));
+    /* Initialize free block header/footer and the epilogue header */
+    PUT(HDRP(bp), PACK(size, 0));           /* Free block header */
+    
+    PUT(FTRP(bp), PACK(size, 0));           /* Free block footer */
+    PUT(HDRP(NEXT_BLKP(bp)), PACK(0,1));    /* New epilogue header */
+    
+    /* Coalesce if the previous block was free */
     return coalesce(bp);
 }
 
@@ -228,6 +254,8 @@ void mm_free(void *bp)
     size_t size = GET_SIZE(HDRP(bp));
     
     PUT(HDRP(bp), PACK(size, 0));
+    
+    
     PUT(FTRP(bp), PACK(size, 0));
     coalesce(bp);
 }
