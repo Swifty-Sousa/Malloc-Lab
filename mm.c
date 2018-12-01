@@ -352,9 +352,11 @@ static void place(void *bp, uint32_t asize)
     {
         PUT(HDRP(bp), PACK(asize, 1));
         PUT(FTRP(bp), PACK(asize, 1));
+        removefreeblock(bp);
         bp = NEXT_BLKP(bp);
         PUT(HDRP(bp), PACK(csize - asize, 0));
         PUT(FTRP(bp), PACK(csize - asize, 0));
+        coalesce(bp);
     }
     else
     {
