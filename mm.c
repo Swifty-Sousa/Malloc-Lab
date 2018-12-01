@@ -31,6 +31,11 @@
 #include "mm.h"
 #include "memlib.h"
 
+
+//global variables 
+static char heap_listp=0;
+
+
 /*********************************************************
  * NOTE TO STUDENTS: Before you do anything else, please
  * provide your team information in the following struct.
@@ -127,9 +132,8 @@ static inline void* PREV_BLKP(void *bp)
 {
     return  ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)));
 }
-
-static inline void* NEXT_FREEP(ptr) (*(char**)((char*)(ptr)+DSIZE))
-static inline void* PREV_FREEP(ptr) (*(char**)((char*)(ptr)))
+inline void* NEXT_FREEP(ptr) (*(char**)((char*)(ptr)+DSIZE))
+inline void* PREV_FREEP(ptr) (*(char**)((char*)(ptr)))
 /////////////////////////////////////////////////////////////////////////////
 //
 // Global Variables
