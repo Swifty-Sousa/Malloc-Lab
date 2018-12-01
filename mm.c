@@ -128,6 +128,8 @@ static inline void* PREV_BLKP(void *bp)
   return  ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)));
 }
 
+static inline void* NEXT_FREEP(ptr) (*(chr**)((char*)(ptr)+DSIZE))
+static inline void* PREV_FREEP(ptr) (*(chr**)((char*)(ptr)))
 /////////////////////////////////////////////////////////////////////////////
 //
 // Global Variables
@@ -196,7 +198,14 @@ static void *extend_heap(uint32_t words)
 //
 static void *find_fit(uint32_t asize)
 {
-  return NULL; /* no fit */
+  // start pointer
+  void *ptr;
+  for(ptr =heap_listp; ptr!=NULL; NEXT_FREEP(ptr))
+  {
+    if(!GET_ALLOC(HDRP(ptr)) && (asize<= GET_SIZE(HDRP(ptr))))
+      return ptr;
+  }
+  return NULL;
 }
 
 // mm_free: The mm_free routine frees the block pointed to by ptr. 
