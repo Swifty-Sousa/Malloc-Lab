@@ -180,10 +180,10 @@ static void *extend_heap(uint32_t words)
     
     size = (words%2) ? (words+1) * WSIZE : words * WSIZE;
     if((long)(bp = mem_sbrk(size)) == -1)
-        return NULL
+        return NULL;
     
     PUT(HDRP(bp), PACK(size, 0));
-    PUT(FDRP(bp), PACK(size, 0));
+    PUT(FTRP(bp), PACK(size, 0));
     PUT(HDRP(NEXT_BLKP(bp)), PACK(0,1));
     return coalesce(bp);
 }
@@ -206,10 +206,10 @@ static void *find_fit(uint32_t asize)
 
 void mm_free(void *bp)
 {
-    size_t size = GETSIZE(HDRP(bp));
+    size_t size = GET_SIZE(HDRP(bp));
     
     PUT(HDRP(bp), PACK(size, 0));
-    PUT(FDRP(bp), PACK(size, 0));
+    PUT(FTRP(bp), PACK(size, 0));
     coalesce(bp);
 }
 
@@ -263,7 +263,7 @@ void *mm_malloc(uint32_t size)
     char* bp;
     
     if(size == 0)
-        return NULL
+        return NULL;
     
     if(size <= DSIZE)
         asize = 2*DSIZE;
@@ -278,7 +278,7 @@ void *mm_malloc(uint32_t size)
     
     extendsize = MAX(asize, CHUNKSIZE);
     if((bp = extend_heap(extendsize/WSIZE)) == NULL)
-        return NULL
+        return NULL;
     
     place(bp, asize);
     return bp;
