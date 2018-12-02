@@ -63,7 +63,7 @@ team_t team = {
 #define OVERHEAD    8       /* overhead of header and footer (bytes) */
 #define MIN_PAYLOAD 8
 #define PSIZE       4
-#define ALIGNMENR   8
+#define ALIGNMENT   8
 #define MINIMUM     24
 
 static char* free_listp = 0;
@@ -72,7 +72,10 @@ static inline int MAX(int x, int y)
 {
     return x > y ? x : y;
 }
-
+static inline int ALIGN( int size)
+{
+    return (((size uint32_t)(size) + (ALIGNMENT-1))& ~0x7);
+}
 //
 // Pack a size and allocated bit into a word
 // We mask of the "alloc" field to insure only
@@ -406,7 +409,7 @@ static void place(void *bp, uint32_t asize)
 void *mm_realloc(void *ptr, uint32_t size)
 {
     uint32_t oldsize, asize;
-    void *newp;
+    void *newptr;
 
     asize= MAX(ALIGN(size) + DSIZE, MINIMUM);
     if(size==0)
@@ -421,7 +424,7 @@ void *mm_realloc(void *ptr, uint32_t size)
     oldsize = GET_SIZE(HDRP(ptr));
     if(asize==oldsize)
     {
-        return ptr
+        return ptr;
     }
     newptr = mm_malloc(size);
     if(!newptr)
@@ -429,9 +432,8 @@ void *mm_realloc(void *ptr, uint32_t size)
         return 0;
     }
     if(size < oldsize)
-    {
-        memcpy(newptr, ptr, oldsize);
-    }
+        oldsize=size;
+    memcpy(newptr, ptr, oldsize);
     mm_free(ptr);
     return newptr;
 }
