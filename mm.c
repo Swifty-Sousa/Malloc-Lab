@@ -72,9 +72,9 @@ static inline int MAX(int x, int y)
 {
     return x > y ? x : y;
 }
-static inline int ALIGN( int size)
+static inline int ALIGN(int p)
 {
-    return (((size uint32_t)(size) + (ALIGNMENT-1))& ~0x7);
+    return (((uint32_t)(p) + (ALIGNMENT-1))& ~0x7);
 }
 //
 // Pack a size and allocated bit into a word
