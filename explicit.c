@@ -122,21 +122,15 @@ static inline void *NEXT_BLKP(void *bp)
 {
     return  ((char *)(bp) + GET_SIZE(((char *)(bp) - WSIZE)));
 }
-
+/* if the heap_listp is bp it will point back to itself */
 static inline void* PREV_BLKP(void *bp)
 {
     return  ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)));
 }
 
-static inline void* NEXT_PTR(void *bp)
-{
-    return (*(char**)((char*)(bp)+DSIZE));
-}
+#define NEXT(bp) (*(char**)((char*)(bp)+DSIZE))
+#define PREV(bp) (*(char**)((char*)(bp)))
 
-static inline void* PREV_PTR(void *bp)
-{
-    return (*(char**)((char*)(bp)));
-}
 /////////////////////////////////////////////////////////////////////////////
 //
 // Global Variables
@@ -144,14 +138,6 @@ static inline void* PREV_PTR(void *bp)
 
 static char* heap_listp;  	/* pointer to first block */  
 static char* free_listp;	/* pointer to first free */
-
-typedef struct pointer p;
-
-struct pointer 
-{
-	void* next;
-	void* prev;
-}
 
 //
 // function prototypes for internal helper routines
@@ -162,6 +148,7 @@ static void *find_fit(uint32_t asize);
 static void *coalesce(void *bp);
 static void printblock(void *bp); 
 static void checkblock(void *bp);
+static void free_block(void *bp);
 
 // mm_init: Before calling mm_malloc mm_realloc or mm_free, the 
 // application program (i.e., the trace-driven driver program that 
@@ -172,6 +159,7 @@ static void checkblock(void *bp);
 
 int mm_init(void) 
 {
+	/* making a heap that can store the padding, prologues, and epiogue */
     if((heap_listp = mem_sbrk(4*WSIZE)) == (void*) -1)
         return -1;
     /* padding */
@@ -181,12 +169,18 @@ int mm_init(void)
     PUT(heap_listp + (2*WSIZE), PACK(DSIZE, 1));
     /* epiogue block */
     PUT(heap_listp + (3*WSIZE), PACK(0,1));
+
     /* start it out in the middle of the prologue block */
     heap_listp += (2*WSIZE);
-    free_listp = heap_listp;
-    /* add 1026 more word size blocks */
+    /* start the free out after the epiogue block */
+    free_listp = heap_listp + DSIZE;
+
+    /* add 1024 more word size blocks or 4096 bytes*/
     if(extend_heap(CHUNKSIZE/WSIZE) == NULL)
         return -1;
+    /* making the pointers */
+    PREV(free_listp) = NULL;
+    NEXT(free_listp) = NULL;
     return 0;
 }
 
@@ -194,17 +188,17 @@ int mm_init(void)
 //
 // extend_heap - Extend heap with free block and return its block pointer
 //
-static void *extend_heap(uint32_t words) 
+static void *extend_heap(uint32_t block) 
 {
     char *bp;
     uint32_t size;
     /* align the size to be will added */
-    size = (words%2) ? (words+1) * WSIZE : words * WSIZE;
+    size = (block%2) ? (block+1) * WSIZE : block * WSIZE;
     /* making sure that the block could fit everything */
     if(size < MINIMUM)
         size = MINIMUM;
 
-    /* increase the avaiable heap by words blocks */
+    /* increase the avaiable heap by how many blocks requested*/
     if((long)(bp = mem_sbrk(size)) == -1)
         return NULL;
     
@@ -258,44 +252,55 @@ void mm_free(void *bp)
 // coalesce - boundary tag coalescing. Return ptr to coalesced block
 //
 
-static void *help_combine(void *bp)
+static void free_block(void *bp)
 {
-    if(free_listp == 0)
-    {
-        return;
-    }
-    /* bp is the only free block */
-    if(PREV_PTR(bp) == NULL && NEXT_PTR(bp) == NULL)
-    {
-        free_listp = 0;
-    }
-    /* there are only next pointer */
-    else(PREV_PTR(bp) == NULL && NEXT_PTR(bp) != NULL)
-    {
-        free_listp = NEXT_PTR(bp);
-        PREV_PTR(free_listp) = NULL;
-    }
+	char* prev = PREV(bp);
+	char* next = NEXT(bp);
+	if(prev == NULL && next == NULL)
+	{
+		PUT(HDRP(bp), PACK(0,0));
+	}
+	else if(prev == NULL && next != NULL)
+	{
 
+		PUT(HDRP(bp), PACK(0,0));
+	}
+	else if(prev != NULL && next == NULL)
+	{
+		PUT(HDRP(bp), PACK(0,0));
+	}
+	else if(prev != NULL && next != NULL)
+	{
+		PUT(HDRP(bp), PACK(0,0));
+	}
+	return;
 }
+
 static void *coalesce(void *bp) 
 {
     /* check if the prev is allocated */
     uint32_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
+
+    /* due to the way the heap_listp is pointed this error occurs */
     if(PREV_BLKP(bp) == bp)
         prev_alloc = 1;
 
     /* check if the next is allocated */
     uint32_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
+
     /* getting the size of the current block */
     uint32_t size = GET_SIZE(HDRP(bp));
-    /* both the left and right are not free */
+
+    /* can't coalesce bc prev and next are both allocated */
     if(prev_alloc && next_alloc)
         return bp;
-    /* the next is free */
+
+    /* the next is free so you can combine the current and next*/
     else if(prev_alloc && !next_alloc)
     {
         size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
-        help_combine(NEXT_BLKP(bp));
+        char* next = NEXT_BLKP((NEXT_BLKP(bp)));
+        
         PUT(HDRP(bp), PACK(size, 0));
         PUT(FTRP(bp), PACK(size, 0));
     }
@@ -332,14 +337,12 @@ void *mm_malloc(uint32_t size)
     uint32_t asize;
     uint32_t extendsize;
     char* bp;
-    
+    asize = (size%2) ? (size+1) : size;
     if(size == 0)
         return NULL;
     
-    if(size <= DSIZE)
-        asize = 2*DSIZE;
-    else
-        asize = DSIZE * ((size + (DSIZE) + (DSIZE - 1)) / DSIZE);
+    if(asize <= MINIMUM)
+        asize = MINIMUM;
     
     if((bp = find_fit(asize)) != NULL)
     {
@@ -366,7 +369,7 @@ static void place(void *bp, uint32_t asize)
 {
     uint32_t csize = GET_SIZE(HDRP(bp));
     
-    if((csize - asize) >= (2*DSIZE))
+    if((csize - asize) >= (MINIMUM))
     {
         PUT(HDRP(bp), PACK(asize, 1));
         PUT(FTRP(bp), PACK(asize, 1));
