@@ -59,6 +59,7 @@ team_t team = {
 #define DSIZE       8       /* doubleword size (bytes) */
 #define CHUNKSIZE  (1<<12)  /* initial heap size (bytes) */
 #define OVERHEAD    8       /* overhead of header and footer (bytes) */
+#define MINIMUM     24      /* minimum size of the allocated block */
 
 static inline int MAX(int x, int y)
 {
@@ -127,12 +128,12 @@ static inline void* PREV_BLKP(void *bp)
     return  ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)));
 }
 
-static inline void* NEXT_FREE(void *bp)
+static inline void* NEXT_PTR(void *bp)
 {
     return (*(char**)((char*)(bp)+DSIZE));
 }
 
-static inline void* PREV_FREE(void *ptr)
+static inline void* PREV_PTR(void *bp)
 {
     return (*(char**)((char*)(bp)));
 }
@@ -144,10 +145,12 @@ static inline void* PREV_FREE(void *ptr)
 static char* heap_listp;  	/* pointer to first block */  
 static char* free_listp;	/* pointer to first free */
 
+typedef struct pointer p;
+
 struct pointer 
 {
-	char* next;
-	char* prev;
+	void* next;
+	void* prev;
 }
 
 //
@@ -180,6 +183,7 @@ int mm_init(void)
     PUT(heap_listp + (3*WSIZE), PACK(0,1));
     /* start it out in the middle of the prologue block */
     heap_listp += (2*WSIZE);
+    free_listp = heap_listp;
     /* add 1026 more word size blocks */
     if(extend_heap(CHUNKSIZE/WSIZE) == NULL)
         return -1;
@@ -196,17 +200,21 @@ static void *extend_heap(uint32_t words)
     uint32_t size;
     /* align the size to be will added */
     size = (words%2) ? (words+1) * WSIZE : words * WSIZE;
+    /* making sure that the block could fit everything */
+    if(size < MINIMUM)
+        size = MINIMUM;
+
     /* increase the avaiable heap by words blocks */
     if((long)(bp = mem_sbrk(size)) == -1)
         return NULL;
     
-    /* making the header and footer */
+    /* making the header */
     PUT(HDRP(bp), PACK(size, 0));
+    /*making the footer */
 	PUT(FTRP(bp), PACK(size, 0));
-
     /* making a epilogue block */
     PUT(HDRP(NEXT_BLKP(bp)), PACK(0,1));
-    
+
     /* coalesce if the previous block was free */
     return coalesce(bp);
 }
@@ -249,19 +257,45 @@ void mm_free(void *bp)
 //
 // coalesce - boundary tag coalescing. Return ptr to coalesced block
 //
+
+static void *help_combine(void *bp)
+{
+    if(free_listp == 0)
+    {
+        return;
+    }
+    /* bp is the only free block */
+    if(PREV_PTR(bp) == NULL && NEXT_PTR(bp) == NULL)
+    {
+        free_listp = 0;
+    }
+    /* there are only next pointer */
+    else(PREV_PTR(bp) == NULL && NEXT_PTR(bp) != NULL)
+    {
+        free_listp = NEXT_PTR(bp);
+        PREV_PTR(free_listp) = NULL;
+    }
+
+}
 static void *coalesce(void *bp) 
 {
+    /* check if the prev is allocated */
     uint32_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
-    uint32_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
-    uint32_t size = GET_SIZE(HDRP(bp));
+    if(PREV_BLKP(bp) == bp)
+        prev_alloc = 1;
 
+    /* check if the next is allocated */
+    uint32_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
+    /* getting the size of the current block */
+    uint32_t size = GET_SIZE(HDRP(bp));
     /* both the left and right are not free */
     if(prev_alloc && next_alloc)
         return bp;
-    /* the right is free */
+    /* the next is free */
     else if(prev_alloc && !next_alloc)
     {
         size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
+        help_combine(NEXT_BLKP(bp));
         PUT(HDRP(bp), PACK(size, 0));
         PUT(FTRP(bp), PACK(size, 0));
     }
