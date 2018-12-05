@@ -128,8 +128,8 @@ static inline void* PREV_BLKP(void *bp)
     return  ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)));
 }
 
-#define NEXT(bp) (*(char**)((char*)(bp)+DSIZE))
-#define PREV(bp) (*(char**)((char*)(bp)))
+static inline void removefreeblk(void *bp);
+static inline void addfreeblk(void *bp);
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -148,7 +148,13 @@ static void *find_fit(uint32_t asize);
 static void *coalesce(void *bp);
 static void printblock(void *bp); 
 static void checkblock(void *bp);
-static void free_block(void *bp);
+
+typedef struct listitem
+{
+  struct listitem* prev;
+  struct listitem* next;
+}listitem;
+
 
 // mm_init: Before calling mm_malloc mm_realloc or mm_free, the 
 // application program (i.e., the trace-driven driver program that 
@@ -172,15 +178,16 @@ int mm_init(void)
 
     /* start it out in the middle of the prologue block */
     heap_listp += (2*WSIZE);
-    /* start the free out after the epiogue block */
-    free_listp = heap_listp + DSIZE;
+    
 
-    /* add 1024 more word size blocks or 4096 bytes*/
+    /* add 1026 more word size blocks or 4096 bytes*/
     if(extend_heap(CHUNKSIZE/WSIZE) == NULL)
         return -1;
+   	/* start the free out after the epiogue block */
+    free_listp = heap_listp + DSIZE;
     /* making the pointers */
-    PREV(free_listp) = NULL;
-    NEXT(free_listp) = NULL;
+    PREV_FREE(free_listp) = NULL;
+    NEXT_FREE(free_listp) = NULL;
     return 0;
 }
 
@@ -245,6 +252,7 @@ void mm_free(void *bp)
     
     PUT(HDRP(bp), PACK(size, 0));
     PUT(FTRP(bp), PACK(size, 0));
+    
     coalesce(bp);
 }
 
@@ -252,59 +260,20 @@ void mm_free(void *bp)
 // coalesce - boundary tag coalescing. Return ptr to coalesced block
 //
 
-static void free_block(void *bp)
-{
-	char* prev = PREV(bp);
-	char* next = NEXT(bp);
-	if(prev == NULL && next == NULL)
-	{
-		PUT(HDRP(bp), PACK(0,0));
-	}
-	else if(prev == NULL && next != NULL)
-	{
-
-		PUT(HDRP(bp), PACK(0,0));
-	}
-	else if(prev != NULL && next == NULL)
-	{
-		PUT(HDRP(bp), PACK(0,0));
-	}
-	else if(prev != NULL && next != NULL)
-	{
-		PUT(HDRP(bp), PACK(0,0));
-	}
-	return;
-}
-
 static void *coalesce(void *bp) 
 {
-    /* check if the prev is allocated */
-    uint32_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
-
-    /* due to the way the heap_listp is pointed this error occurs */
-    if(PREV_BLKP(bp) == bp)
-        prev_alloc = 1;
-
-    /* check if the next is allocated */
-    uint32_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
-
-    /* getting the size of the current block */
-    uint32_t size = GET_SIZE(HDRP(bp));
-
-    /* can't coalesce bc prev and next are both allocated */
-    if(prev_alloc && next_alloc)
+    size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
+    size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
+    size_t size = GET_SIZE(HDRP(bp));
+    
+    if(prev_alloc && next_alloc)\
         return bp;
-
-    /* the next is free so you can combine the current and next*/
     else if(prev_alloc && !next_alloc)
     {
         size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
-        char* next = NEXT_BLKP((NEXT_BLKP(bp)));
-        
         PUT(HDRP(bp), PACK(size, 0));
         PUT(FTRP(bp), PACK(size, 0));
     }
-    /* the left is free */
     else if(!prev_alloc && next_alloc)
     {
         size += GET_SIZE(HDRP(PREV_BLKP(bp)));
@@ -312,7 +281,6 @@ static void *coalesce(void *bp)
         PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
         bp = PREV_BLKP(bp);
     }
-    /* both left and right are free */
     else
     {
         size += GET_SIZE(HDRP(PREV_BLKP(bp))) + GET_SIZE(FTRP(NEXT_BLKP(bp)));
@@ -337,13 +305,20 @@ void *mm_malloc(uint32_t size)
     uint32_t asize;
     uint32_t extendsize;
     char* bp;
-    asize = (size%2) ? (size+1) : size;
+    /* stupid rquest */
     if(size == 0)
         return NULL;
-    
-    if(asize <= MINIMUM)
-        asize = MINIMUM;
-    
+    /* making the requested size divisible by 8 */
+    if(size <= 2*DSIZE)
+        size = 2*DSIZE;
+    else if((size%DSIZE) != 0)
+    {
+        uint32_t times = size/DSIZE;
+        size = (times+1)* DSIZE;
+    }
+    /* requested size plus minimun block size */
+    asize = DSIZE + size;
+
     if((bp = find_fit(asize)) != NULL)
     {
         place(bp, asize);
