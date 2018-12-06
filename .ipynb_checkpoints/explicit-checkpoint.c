@@ -116,7 +116,7 @@ static void *coalesce(void *bp);
 static void printblock(void *bp); 
 static void checkblock(void *bp);
 static void rmfreeblk(void *bp);
-static void addfreeblk(void *bp, void *adding);
+static void addfreblk(void *bp, void *adding);
 
 // mm_init: Before calling mm_malloc mm_realloc or mm_free, the 
 // application program (i.e., the trace-driven driver program that 
@@ -451,7 +451,7 @@ static void checkblock(void *bp)
 // Helper fuctions for coalese 
 
 
-static void rmfreeblk(void *Bp)
+static itemlist* rmfreeblk(void *Bp)
 {
   // first make bp into a listitem pointer
   listitem* bp =(listitem*)Bp;
@@ -459,10 +459,14 @@ static void rmfreeblk(void *Bp)
   if(Bp ->next==NULL)
   {
     //bp is the end of the list
+    bp->prev->next==NULL;
+    pack((void*)bp, 1);
   }
   else if(bp->prev==NULL)
   {
-
+    //bp is the first thing in the list
+    bp->next->prev==NULL;
+    pack((void*)bp, 1);
 
   }
   else{
@@ -471,7 +475,7 @@ static void rmfreeblk(void *Bp)
     bp->prev->next= bp->next;
     pack((void*)bp,1)
   }
-
+  return bp;
 }
 /*
 - remove free block
@@ -479,7 +483,24 @@ static void rmfreeblk(void *Bp)
         - remove in between two 
         - remove first
         - remove last
-        */
+*/
+
+static void* addfreblk(void* After, void* Ins)
+{
+  // insert ins as After ->nex
+  (itemlist*)ins= (itemlist*)Ins;
+  (itemlist*)after= (itemlist*)After;
+  if(after->next==NULL)
+  {
+    // ins needs to be the new end of list
+    after->next=ins;
+    ins->prev=after;
+    ins->next=NULL;
+  }
+  ins->next=after->next;
+  ins->prev=after;
+  after->next->prev=ins;
+}
 /*
 -instert free Block
     - insert a new block into the free block lists
