@@ -99,13 +99,11 @@ static inline void* PREV_BLKP(void *bp)
     return  ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)));
 }
 
-#define NEXT_FREE(bp) (*(char**)((char*)(bp)+DSIZE))
-#define PREV_FREE(bp) (*(char**)((char*)(bp)))
-
 // Global Variables
 
 static char* heap_listp;    /* pointer to first block */  
-static char* free_listp;    /* pointer to first free */
+static listitem* free_listp;    /* pointer to first free */
+static listitem* endfree_listp;   /* pointer to end of free */
 
 // function prototypes for internal helper routines
 
@@ -116,7 +114,7 @@ static void *coalesce(void *bp);
 static void printblock(void *bp); 
 static void checkblock(void *bp);
 static void rmfreeblk(void *bp);
-static void addfreblk(void *bp, void *adding);
+static void infreeblk(void *bp);
 
 // mm_init: Before calling mm_malloc mm_realloc or mm_free, the 
 // application program (i.e., the trace-driven driver program that 
@@ -149,11 +147,12 @@ int mm_init(void)
         return -1;
 
     /* start the free out after the epiogue block */
-    free_listp = heap_listp + DSIZE;
+    free_listp = (listitem*)heap_listp + DSIZE;
+    endfree_listp = free_listp;
 
     /* making the pointers */
-    ((listitem*) free_listp)->prev = (listitem*)free_listp;
-    ((listitem*) free_listp)->next = (listitem*)free_listp;
+    ((listitem*) free_listp)->prev = NULL;
+    ((listitem*) free_listp)->next = NULL;
 
     return 0;
 }
@@ -230,9 +229,6 @@ void *mm_malloc(uint32_t size)
         return NULL;
     
     place(bp, asize);
-    listitem * temp= (listitem*)bp;
-    printf(temp->next);
-    printf(temp->next->prev);
     return bp;
 } 
 
@@ -288,12 +284,56 @@ void mm_free(void *bp)
     coalesce(bp);
 }
 
+/* removes a free block */
 
-static void infreeblk(listitem *bp, listitem *adding);
+static void rmfreeblk(void *bp)
 {
-    add->next = bp->next;
-    bp->next = add;
-    add->prev = bp;
+    listitem* curr = (listitem*) bp;
+    if (free_listp == NULL)
+        return;
+    /* this is the only block */
+    if ((curr->prev == NULL) && (curr->next == NULL))
+    {
+        free_listp = NULL;
+    }
+    /* this is the first block */
+    else if ((curr->prev == NULL) && (curr->next != NULL))
+    {
+        free_listp = curr->next;
+        free_listp->prev = NULL;  
+    }
+
+    /* this is the last block */
+    else if((curr->prev != NULL) && (curr->next == NULL))
+    {
+        curr->next->prev = NULL;
+    }
+
+    /* this block is in the middle */
+    else if ((curr->prev != NULL) && (curr->next != NULL))
+    {
+        curr->next->prev = curr->prev;  
+        curr->prev->next = curr->next;
+    }
+}
+
+static void infreeblk(void* bp)
+{
+    listitem* curr = (listitem*)bp;
+    if(free_listp == NULL)
+    { 
+        curr->next = NULL;
+        curr->prev = NULL;
+        free_listp = bp;
+    }
+    else
+    {
+        curr->prev = NULL;
+        curr->next = free_listp;
+        free_listp->prev = curr;
+
+        free_listp = curr;
+    }
 }
 
 // coalesce - boundary tag coalescing. Return ptr to coalesced block
@@ -303,34 +343,42 @@ static void *coalesce(void *bp)
     size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
     size_t size = GET_SIZE(HDRP(bp));
-    
+
+    /* both the left and right are not free */
     if(prev_alloc && next_alloc)
         return bp;
+    /* the right is free */
     else if(prev_alloc && !next_alloc)
     {
         size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
-        //rmfreeblk(NEXT_BLKP(bp));
+        rmfreeblk(NEXT_BLKP(bp));
         PUT(HDRP(bp), PACK(size, 0));
         PUT(FTRP(bp), PACK(size, 0));
     }
+    /* the left is free */
     else if(!prev_alloc && next_alloc)
     {
         size += GET_SIZE(HDRP(PREV_BLKP(bp)));
         bp = PREV_BLKP(bp);
-        //rmfreeblk(NEX);
+        rmfreeblk(NEXT_BLKP(bp));
         PUT(FTRP(bp), PACK(size, 0));
-        PUT(HDRP(prev), PACK(size, 0));
-        bp = PREV_BLKP(bp);
+        PUT(HDRP(bp), PACK(size, 0));
+        
     }
+    /* both left and right are free */
     else
     {
         size += GET_SIZE(HDRP(PREV_BLKP(bp))) + GET_SIZE(FTRP(NEXT_BLKP(bp)));
+        rmfreeblk(NEXT_BLKP(bp));
+        rmfreeblk(PREV_BLKP(bp));
         PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
         PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
         bp = PREV_BLKP(bp);
     }
+    infreeblk(bp);
     return bp;
 }
+
 // mm_realloc -- implemented for you
 
 // mm_realloc: The mm_realloc routine returns a pointer to an allocated 
@@ -449,159 +497,4 @@ static void checkblock(void *bp)
     {
         printf("Error: header does not match footer\n");
     }
-}
-
-// Helper fuctions for coalese 
-
-
-static itemlist* rmfreeblk(void *Bp)
-{
-  // first make bp into a listitem pointer
-  listitem* bp =(listitem*)Bp;
-  (listitem*)temp; // this is for the reallocation
-  if(Bp ->next==NULL)
-  {
-    //bp is the end of the list
-    bp->prev->next==NULL;
-    pack((void*)bp, 1);
-  }
-  else if(bp->prev==NULL)
-  {
-    //bp is the first thing in the list
-    bp->next->prev==NULL;
-    pack((void*)bp, 1);
-
-  }
-  else{
-    // bp is between two free blocks
-    bp->next->prev= bp->prev;
-    bp->prev->next= bp->next;
-    pack((void*)bp,1)
-  }
-  return bp;
-}
-/*
-- remove free block
-    -reogazie pointers after removign a free block
-        - remove in between two 
-        - remove first
-        - remove last
-*/
-
-static void* addfreblk(void* After, void* Ins)
-{
-  // insert ins as After ->nex
-  (itemlist*)ins= (itemlist*)Ins;
-  (itemlist*)after= (itemlist*)After;
-  if(after->next==NULL)
-  {
-    // ins needs to be the new end of list
-    after->next=ins;
-    ins->prev=after;
-    ins->next=NULL;
-  }
-  ins->next=after->next;
-  ins->prev=after;
-  after->next->prev=ins;
-}
-/*
--instert free Block
-    - insert a new block into the free block lists
-*/
-
-/* removes a free block */
-
-static void rmfreeblk(void *bp)
-{
-    listitem* curr = (listitem*) bp;
-    if (free_listp == NULL)
-        return;
-    // this is the only block
-    if ((curr->prev == NULL) && (curr->next == NULL))
-    {
-        free_listp = NULL;
-    }
-    /* this is the first block */
-    else if ((curr->prev == NULL) && (curr->next != NULL))
-    {
-        free_listp = curr->next;
-        free_listp->prev = NULL;  
-    }
-
-    /* this is the last block */
-    else if((curr->prev != NULL) && (curr->next == NULL))
-    {
-        curr->next->prev = NULL;
-    }
-
-    /* this block is in the middle */
-    else if ((curr->prev != NULL) && (curr->next != NULL))
-    {
-        curr->next->prev = curr->prev;  
-        curr->prev->next = curr->next;
-    }
-}
-
-// it will insert block bp to the beginning of the free list
-static void infreeblk(void* bp)
-{
-    listitem* curr = (listitem*)bp;
-    if(free_listp == NULL)
-    { 
-        curr->next = NULL;
-        curr->prev = NULL;
-        free_listp = bp;
-    }
-    else
-    {
-        curr->prev = NULL;
-        curr->next = free_listp;
-        free_listp->prev = curr;
-
-        free_listp = curr;
-    }
-}
-
-// coalesce - boundary tag coalescing. Return ptr to coalesced block
-// the combined block will be added to the beginning of the freelist
-
-static void *coalesce(void *bp) 
-{
-    size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
-    size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
-    size_t size = GET_SIZE(HDRP(bp));
-
-    /* both the left and right are not free */
-    if(prev_alloc && next_alloc)
-        return bp;
-    /* the right is free */
-    else if(prev_alloc && !next_alloc)
-    {
-        size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
-        rmfreeblk(NEXT_BLKP(bp));
-        PUT(HDRP(bp), PACK(size, 0));
-        PUT(FTRP(bp), PACK(size, 0));
-    }
-    /* the left is free */
-    else if(!prev_alloc && next_alloc)
-    {
-        size += GET_SIZE(HDRP(PREV_BLKP(bp)));
-        bp = PREV_BLKP(bp);
-        rmfreeblk(NEXT_BLKP(bp));
-        PUT(FTRP(bp), PACK(size, 0));
-        PUT(HDRP(bp), PACK(size, 0));
-        
-    }
-    /* both left and right are free */
-    else
-    {
-        size += GET_SIZE(HDRP(PREV_BLKP(bp))) + GET_SIZE(FTRP(NEXT_BLKP(bp)));
-        rmfreeblk(NEXT_BLKP(bp));
-        rmfreeblk(PREV_BLKP(bp));
-        PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
-        PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
-        bp = PREV_BLKP(bp);
-    }
-    infreeblk(bp);
-    return bp;
 }
