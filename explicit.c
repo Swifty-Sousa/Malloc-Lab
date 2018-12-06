@@ -5,10 +5,6 @@
 #include "mm.h"
 #include "memlib.h"
 
-/*********************************************************
- * NOTE TO STUDENTS: Before you do anything else, please
- * provide your team information in the following struct.
- ********************************************************/
 team_t team = {
   /* Team name */
   "B",
@@ -101,9 +97,8 @@ static inline void* PREV_BLKP(void *bp)
 
 // Global Variables
 
-static char* heap_listp;    /* pointer to first block */  
-static listitem* free_listp;    /* pointer to first free */
-static listitem* endfree_listp;   /* pointer to end of free */
+static char* heap_listp;        // pointer to first block
+static listitem* free_listp;    // pointer to first free
 
 // function prototypes for internal helper routines
 
@@ -123,36 +118,34 @@ static void infreeblk(void *bp);
 // the initial heap area. The return value should be -1 if there 
 // was a problem in performing the initialization, 0 otherwise.
 
+
 int mm_init(void) 
 {
     /* making a heap that can store the padding, prologues, and epiogue */
     if((heap_listp = mem_sbrk(4*WSIZE)) == (void*) -1)
         return -1;
 
-    /* padding */
+    // first block used as padding 
     PUT(heap_listp, 0);
 
-    /* prologue blocks */
+    // prologue blocks 
     PUT(heap_listp + (1*WSIZE), PACK(DSIZE, 1));
     PUT(heap_listp + (2*WSIZE), PACK(DSIZE, 1));
 
-    /* epiogue block */
+    // epiogue block
     PUT(heap_listp + (3*WSIZE), PACK(0,1));
 
-    /* start it out in the middle of the prologue block */
+    // start it out in the middle of the prologue block
     heap_listp += (2*WSIZE);
     
-    /* add 1026 more word size blocks or 4096 bytes*/
+    // start the free out after the epiogue block
+    free_listp = (listitem*)heap_listp + DSIZE;
+
+    // setting the pointers and root
+    free_listp = NULL;
+    // add 1026 more word size blocks or 4096 bytes
     if(extend_heap(CHUNKSIZE/WSIZE) == NULL)
         return -1;
-
-    /* start the free out after the epiogue block */
-    free_listp = (listitem*)heap_listp + DSIZE;
-    endfree_listp = free_listp;
-
-    /* making the pointers */
-    ((listitem*) free_listp)->prev = NULL;
-    ((listitem*) free_listp)->next = NULL;
 
     return 0;
 }
@@ -227,7 +220,7 @@ void *mm_malloc(uint32_t size)
     extendsize = MAX(asize, CHUNKSIZE);
     if((bp = extend_heap(extendsize/WSIZE)) == NULL)
         return NULL;
-    
+
     place(bp, asize);
     return bp;
 } 
@@ -289,54 +282,31 @@ void mm_free(void *bp)
 static void rmfreeblk(void *bp)
 {
     listitem* curr = (listitem*) bp;
-    if (free_listp == NULL)
-        return;
-    /* this is the only block */
-    if ((curr->prev == NULL) && (curr->next == NULL))
-    {
-        free_listp = NULL;
-    }
-    /* this is the first block */
-    else if ((curr->prev == NULL) && (curr->next != NULL))
-    {
-        free_listp = curr->next;
-        free_listp->prev = NULL;  
-    }
 
-    /* this is the last block */
-    else if((curr->prev != NULL) && (curr->next == NULL))
-    {
-        curr->next->prev = NULL;
-    }
-
-    /* this block is in the middle */
-    else if ((curr->prev != NULL) && (curr->next != NULL))
-    {
-        curr->next->prev = curr->prev;  
-        curr->prev->next = curr->next;
-    }
+    curr->prev->next = curr->next;
+    curr->next->prev = curr->prev;
+    curr->next = NULL;
+    curr->prev = NULL;
 }
 
+// it will insert block bp to the beginning of the free list
 static void infreeblk(void* bp)
 {
     listitem* curr = (listitem*)bp;
-    if(free_listp == NULL)
-    { 
-        curr->next = NULL;
-        curr->prev = NULL;
-        free_listp = bp;
-    }
-    else
+    if(free_listp->next == NULL)
     {
-        curr->prev = NULL;
-        curr->next = free_listp;
-        free_listp->prev = curr;
-
         free_listp = curr;
     }
+    else if(free_listp->next != NULL)
+    {
+        curr->next = free_listp->next;
+        curr->prev = free_listp;
+        free_listp->next = curr;
+    }   
 }
 
 // coalesce - boundary tag coalescing. Return ptr to coalesced block
+// the combined block will be added to the beginning of the freelist
 
 static void *coalesce(void *bp) 
 {
@@ -344,10 +314,13 @@ static void *coalesce(void *bp)
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
     size_t size = GET_SIZE(HDRP(bp));
 
-    /* both the left and right are not free */
+    // both the left and right are not free
     if(prev_alloc && next_alloc)
+    {
+        infreeblk(bp);
         return bp;
-    /* the right is free */
+    }
+    // the right is free
     else if(prev_alloc && !next_alloc)
     {
         size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
@@ -355,7 +328,7 @@ static void *coalesce(void *bp)
         PUT(HDRP(bp), PACK(size, 0));
         PUT(FTRP(bp), PACK(size, 0));
     }
-    /* the left is free */
+    // the left is free 
     else if(!prev_alloc && next_alloc)
     {
         size += GET_SIZE(HDRP(PREV_BLKP(bp)));
@@ -365,15 +338,15 @@ static void *coalesce(void *bp)
         PUT(HDRP(bp), PACK(size, 0));
         
     }
-    /* both left and right are free */
+    // both left and right are free
     else
     {
         size += GET_SIZE(HDRP(PREV_BLKP(bp))) + GET_SIZE(FTRP(NEXT_BLKP(bp)));
-        rmfreeblk(NEXT_BLKP(bp));
-        rmfreeblk(PREV_BLKP(bp));
-        PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
-        PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
         bp = PREV_BLKP(bp);
+        rmfreeblk(NEXT_BLKP(bp));
+        rmfreeblk(NEXT_BLKP(NEXT_BLKP(bp)));
+        PUT(HDRP(bp), PACK(size, 0));
+        PUT(FTRP(bp), PACK(size, 0));
     }
     infreeblk(bp);
     return bp;
