@@ -479,3 +479,14 @@ static void checkblock(void *bp)
         printf("Error: header does not match footer\n");
     }
 }
+
+// Helper fuctions for coalese 
+/*
+- remove free block
+    -reogazie pointers after removign a free block
+        - remove in between two 
+        - remove first
+        - remove last
+-instert free Block
+    - insert a new block into the free block lists
+*/
