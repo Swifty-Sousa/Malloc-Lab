@@ -230,6 +230,9 @@ void *mm_malloc(uint32_t size)
         return NULL;
     
     place(bp, asize);
+    listitem * temp= (listitem*)bp;
+    printf(temp->next);
+    printf(temp->next->prev);
     return bp;
 } 
 
