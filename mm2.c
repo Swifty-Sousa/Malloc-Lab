@@ -170,8 +170,26 @@ static void rmfb(void *bp)
     {
         //bp->next->prev= bp->prev;
         PREV_FB(NEXT_FB(bp))=PREV_FB(bp);
-        NEXT_FB(PREV_FB(bp))=NEXT_FB(bp);te
+        NEXT_FB(PREV_FB(bp))=NEXT_FB(bp);
     }
+}
+// to insert free blocks
+/*
+    either list is empty and you add a new one or 
+    or its not and you append the front
+*/
+static void insfb(*void bp)
+{
+    if(heap_listp==NULL)
+    {
+        NEXT_FB(bp)=NULL;
+        PREV_FB(bp)= NULL;
+        heap_listp=bp;
+    }
+    PREV_FB(bp)=NULL;
+    prev(heap_listp)=bp;
+    NEXT_FB(bp)=heap_listp;
+    heap_listp=bp;
 }
  /////////////////////////////////////////////////////////////////////////////
  //
