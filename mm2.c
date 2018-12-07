@@ -170,7 +170,7 @@ static void rmfb(void *bp)
     {
         //bp->next->prev= bp->prev;
         PREV_FB(NEXT_FB(bp))=PREV_FB(bp);
-        NEXT_FB(PREV_FB(bp))=NEXT_FB(bp);
+        NEXT_FB(PREV_FB(bp))=NEXT_FB(bp);te
     }
 }
  /////////////////////////////////////////////////////////////////////////////
