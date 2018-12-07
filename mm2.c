@@ -154,19 +154,23 @@ static void rmfb(void *bp)
     {
         //case 1
         heap_listp=0;
-    }
+    
     else if(NEXT_FB(bp)!=NULL && PREV_FB(bp)==NULL)
     {
         // case 2
-
+        heap_listp= NEXT_FB(bp);
+        PREV_FB(heap)=NULL;
     }
     else if(NEXT_FB(bp)==NULL && PREV_FB(bp)!=NULL)
     {
         //case 3
+        NEXT_FB(PREV_FB(bp))=NULL;
     }
     else if(NEXT_FB(bp)!=NULL && PREV_FB(bp)!=NULL)
     {
-        // case 4
+        //bp->next->prev= bp->prev;
+        PREV_FB(NEXT_FB(bp))=PREV_FB(bp);
+        NEXT_FB(PREV_FB(bp))=NEXT_FB(bp);
     }
 }
  /////////////////////////////////////////////////////////////////////////////
