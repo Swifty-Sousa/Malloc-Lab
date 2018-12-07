@@ -98,7 +98,7 @@ static inline void* PREV_BLKP(void *bp)
 // Global Variables
 
 static char* heap_listp;        // pointer to first block
-static listitem* free_listp;    // pointer to first free
+static char* free_listp;    // pointer to first free
 
 // function prototypes for internal helper routines
 
@@ -139,10 +139,8 @@ int mm_init(void)
     heap_listp += (2*WSIZE);
     
     // start the free out after the epiogue block
-    free_listp = (listitem*)heap_listp + DSIZE;
+    free_listp = heap_listp + DSIZE;
 
-    // setting the pointers and root
-    free_listp = NULL;
     // add 1026 more word size blocks or 4096 bytes
     if(extend_heap(CHUNKSIZE/WSIZE) == NULL)
         return -1;
@@ -151,9 +149,8 @@ int mm_init(void)
 }
 
 
-//
 // extend_heap - Extend heap with free block and return its block pointer
-//
+
 static void *extend_heap(uint32_t block) 
 {
     char *bp;
@@ -281,27 +278,30 @@ void mm_free(void *bp)
 
 static void rmfreeblk(void *bp)
 {
-    listitem* curr = (listitem*) bp;
+    listitem* curr = (listitem*)bp;
+    if(free_listp = NULL)
+        return;
 
-    curr->prev->next = curr->next;
-    curr->next->prev = curr->prev;
-    curr->next = NULL;
-    curr->prev = NULL;
+    if(curr)
 }
 
 // it will insert block bp to the beginning of the free list
 static void infreeblk(void* bp)
 {
-    listitem* curr = (listitem*)bp;
-    if(free_listp->next == NULL)
+    listitem *curr = (listitem*) bp;
+    if(free_listp == NULL)
     {
-        free_listp = curr;
+        curr->next = NULL;
+        curr->prev = NULL;
+        free_listp = bp;
+        return;
     }
-    else if(free_listp->next != NULL)
+    else if(free_listp != NULL)
     {
-        curr->next = free_listp->next;
-        curr->prev = free_listp;
-        free_listp->next = curr;
+        curr->next = (listitem*)free_listp;
+        curr->prev = NULL;
+        free_listp = bp;
+        return;
     }   
 }
 
