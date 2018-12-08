@@ -121,9 +121,6 @@ static void *extend_heap(uint32_t words)
   PUT(FTRP(bp), PACK(size, 0));
   PUT(HDRP(NEXT_BLKP(bp)), PACK(0,1));
 
-  ((freelist*)bp)->next = NULL;
-  ((freelist*)bp)->prev = NULL;
-
   return coalesce(bp);
 }
 
@@ -188,23 +185,17 @@ static void place(void *bp, uint32_t asize)
   {
     PUT(HDRP(bp), PACK(asize, 1));
     PUT(FTRP(bp), PACK(asize, 1));
-    ((freelist*)bp)->next = NULL;
-    ((freelist*)bp)->prev = NULL;
     remove_from_free((freelist*)bp);
 
     bp = NEXT_BLKP(bp);
     PUT(HDRP(bp), PACK(csize - asize, 0));
     PUT(FTRP(bp), PACK(csize - asize, 0));
-    ((freelist*)bp)->next = NULL;
-    ((freelist*)bp)->prev = NULL;
     insert_to_free((freelist*)bp);
   }
   else
   {
     PUT(HDRP(bp), PACK(csize, 1));
     PUT(FTRP(bp), PACK(csize, 1));
-    ((freelist*)bp)->next = NULL;
-    ((freelist*)bp)->prev = NULL;
     remove_from_free((freelist*)bp);
   }
 }
