@@ -153,8 +153,6 @@ void *mm_malloc(uint32_t size)
   if((bp = find_fit(asize)) != NULL)
   {
     place(bp, asize);
-    ((freelist*)bp)->next = NULL;
-    ((freelist*)bp)->prev = NULL;
     mallc += 1;
     return bp;
   }
@@ -164,8 +162,6 @@ void *mm_malloc(uint32_t size)
     return NULL;
 
   place(bp, asize);
-  ((freelist*)bp)->next = NULL;
-  ((freelist*)bp)->prev = NULL;
     mallc += 1;
   return bp;
 }
