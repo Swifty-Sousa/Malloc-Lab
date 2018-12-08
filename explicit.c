@@ -259,8 +259,6 @@ void mm_free(void *bp)
 
   PUT(HDRP(bp), PACK(size, 0));
   PUT(FTRP(bp), PACK(size, 0));
-  ((freelist*)bp)->next = NULL;
-  ((freelist*)bp)->prev = NULL;
 
   coalesce(bp);
 }
