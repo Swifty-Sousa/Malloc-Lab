@@ -84,10 +84,11 @@ static void remove_from_free(freelist* bp);
 static void *find_fit(uint32_t asize);
 static void place(void *bp, uint32_t asize);
 static void *coalesce(void *bp);
-static void printheap(void);
-static void printblock(void *bp);
-static void printfree(void);
-
+static void ph(void);
+static void pb(void *bp);
+static void pf(void);
+int mallc = 0;
+int freec = 0;
 
 int mm_init(void)
 {
@@ -122,20 +123,8 @@ static void *extend_heap(uint32_t words)
 
   ((freelist*)bp)->next = NULL;
   ((freelist*)bp)->prev = NULL;
-    
-  if(!GET_ALLOC(FTRP(PREV_BLKP(bp))))
-  {
-    uint32_t size = GET_SIZE(HDRP(bp)) + GET_SIZE(HDRP(PREV_BLKP(bp)));
-    bp = PREV_BLKP(bp);
-    PUT(HDRP(bp), PACK(size, 0));
-    PUT(FTRP(bp), PACK(size, 0));
-    return bp;
-  }
-  else
-  {
-    insert_to_free((freelist*)bp);
-    return bp;
-  }
+
+  return coalesce(bp);
 }
 
 void *mm_malloc(uint32_t size)
@@ -166,6 +155,7 @@ void *mm_malloc(uint32_t size)
     place(bp, asize);
     ((freelist*)bp)->next = NULL;
     ((freelist*)bp)->prev = NULL;
+    mallc += 1;
     return bp;
   }
 
@@ -176,6 +166,7 @@ void *mm_malloc(uint32_t size)
   place(bp, asize);
   ((freelist*)bp)->next = NULL;
   ((freelist*)bp)->prev = NULL;
+    mallc += 1;
   return bp;
 }
 
@@ -214,8 +205,8 @@ static void place(void *bp, uint32_t asize)
   }
   else
   {
-    PUT(HDRP(bp), PACK(asize, 1));
-    PUT(FTRP(bp), PACK(asize, 1));
+    PUT(HDRP(bp), PACK(csize, 1));
+    PUT(FTRP(bp), PACK(csize, 1));
     ((freelist*)bp)->next = NULL;
     ((freelist*)bp)->prev = NULL;
     remove_from_free((freelist*)bp);
@@ -224,6 +215,11 @@ static void place(void *bp, uint32_t asize)
 
 static void remove_from_free(freelist* bp)
 {
+    if(GET_SIZE(HDRP(bp)) == 0)
+    {
+        PUT(HDRP(bp), PACK(0,1));
+        return;
+    }
   if(bp->next == NULL && bp->prev == NULL)
   {
     firstfree = NULL;
@@ -248,6 +244,10 @@ static void remove_from_free(freelist* bp)
 
 static void insert_to_free(freelist *bp)
 {
+    if(GET_ALLOC(HDRP(bp)))
+    {
+        return;
+    }
   if(firstfree == NULL)
   {
     firstfree = bp;
@@ -293,10 +293,10 @@ static void *coalesce(void *bp)
   else if(prev_alloc && !next_alloc)
   {
     size = size + GET_SIZE(HDRP(NEXT_BLKP(bp)));
+    remove_from_free((freelist*)NEXT_BLKP(bp));
     PUT(HDRP(bp), PACK(size, 0));
     PUT(FTRP(bp), PACK(size, 0));
 
-    remove_from_free((freelist*)NEXT_BLKP(bp));
     insert_to_free((freelist*)bp);
     return bp;
   }
@@ -312,8 +312,10 @@ static void *coalesce(void *bp)
   {
     size = size + GET_SIZE(HDRP(PREV_BLKP(bp))) + GET_SIZE(FTRP(NEXT_BLKP(bp)));
     remove_from_free((freelist*)NEXT_BLKP(bp));
+    remove_from_free((freelist*)PREV_BLKP(bp));
 
     bp = PREV_BLKP(bp);
+    insert_to_free((freelist*)bp);
     PUT(HDRP(bp), PACK(size, 0));
     PUT(FTRP(bp), PACK(size, 0));
     return bp;
@@ -343,7 +345,7 @@ void *mm_realloc(void *ptr, uint32_t size)
     return newp;
 }
 
-static void printheap(void)
+static void ph(void)
 {
     printf("\n");
     void *bp;
@@ -377,10 +379,10 @@ static void printheap(void)
     }
 }
 
-static void printfree(void)
+static void pf(void)
 {
     freelist* bp = firstfree;
-    while(bp != NULL)
+    do
     {
         uint32_t hsize, halloc, fsize, falloc;
 
@@ -391,9 +393,10 @@ static void printfree(void)
         printf("%p: header: [%d:%c] (next [%p] prev [%p]) footer: [%d:%c]\n", bp, (int) hsize, (halloc ? 'a' : 'f'), ((freelist*)bp)->next, ((freelist*)bp)->prev,(int) fsize, (falloc ? 'a' : 'f'));
         bp = bp->next;
     }
+    while(bp != NULL);
 }
 
-static void printblock(void *bp) 
+static void pb(void *bp) 
 {
     uint32_t hsize, halloc, fsize, falloc;
 
