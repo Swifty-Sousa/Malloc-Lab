@@ -154,15 +154,25 @@ void *mm_malloc(uint32_t size)
 static void *find_fit(uint32_t asize)
 {
     freelist* bp;
-
+    freelist* best = NULL;
+    uint32_t best_size = 1000000;
     for(bp = firstfree; bp != NULL; bp = bp->next)
     {
-        if((GET_SIZE(HDRP(bp)) >= asize))
+        if(GET_SIZE(HDRP(bp)) == asize)
         {
             return bp;
         }
+        if(GET_SIZE(HDRP(bp)) < best_size && GET_SIZE(HDRP(bp)) > asize)
+        {
+            best = bp;
+            best_size = GET_SIZE(HDRP(best));
+        }
     }
-    return NULL;
+    if(best_size == 1000000)
+    {
+        return NULL;
+    }
+    return best;
 }
 
 static void place(void *bp, uint32_t asize)
@@ -309,12 +319,12 @@ void *mm_realloc(void *ptr, uint32_t size)
     uint32_t curr_size = GET_SIZE(HDRP(ptr));
     uint32_t combine_size = curr_size + next_size;
     uint32_t asize = size + DSIZE;
-
+    
     if(curr_size > asize)
     {
         return ptr;
     }
-
+    
     if(!next_alloc && combine_size >= asize)
     {
         remove_from_free((freelist*)NEXT_BLKP(ptr));
