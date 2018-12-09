@@ -84,6 +84,9 @@ static void remove_from_free(freelist* bp);
 static void *find_fit(uint32_t asize);
 static void place(void *bp, uint32_t asize);
 static void *coalesce(void *bp);
+static void pb(void *bp);
+static void pf(void);
+static void ph(void);
 
 int mm_init(void)
 {
@@ -348,4 +351,74 @@ void *mm_realloc(void *ptr, uint32_t size)
     memcpy(newp, ptr, copySize);
     mm_free(ptr);
     return newp;
+}
+
+static void ph(void)
+{
+    printf("\n");
+    void *bp;
+    
+    for(bp = start; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp))
+    {
+        uint32_t hsize, halloc, fsize, falloc;
+
+        hsize = GET_SIZE(HDRP(bp));
+        halloc = GET_ALLOC(HDRP(bp));  
+        fsize = GET_SIZE(FTRP(bp));
+        falloc = GET_ALLOC(FTRP(bp)); 
+
+        if(hsize == 0)
+        {
+            printf("%p: EOL\n", bp);
+        }
+
+        printf("%p: header: [%d:%c] (next [%p] prev [%p]) footer: [%d:%c]\n", bp, (int) hsize, (halloc ? 'a' : 'f'), ((freelist*)bp)->next, ((freelist*)bp)->prev,(int) fsize, (falloc ? 'a' : 'f')); 
+    }
+    if(GET_SIZE(HDRP(bp)) == 0)
+    {
+        uint32_t hsize, halloc, fsize, falloc;
+
+        hsize = GET_SIZE(HDRP(bp));
+        halloc = GET_ALLOC(HDRP(bp));
+        fsize = GET_SIZE(FTRP(bp));
+        falloc = GET_ALLOC(FTRP(bp));
+        
+        printf("last block %p: header: [%d:%c] (next [%p] prev [%p]) footer: [%d:%c]\n", bp, (int) hsize, (halloc ? 'a' : 'f'), ((freelist*)bp)->next, ((freelist*)bp)->prev,(int) fsize, (falloc ? 'a' : 'f'));
+    }
+}
+
+static void pf(void)
+{
+    freelist* bp = firstfree;
+    do
+    {
+        uint32_t hsize, halloc, fsize, falloc;
+
+        hsize = GET_SIZE(HDRP(bp));
+        halloc = GET_ALLOC(HDRP(bp));  
+        fsize = GET_SIZE(FTRP(bp));
+        falloc = GET_ALLOC(FTRP(bp));
+        printf("%p: header: [%d:%c] (next [%p] prev [%p]) footer: [%d:%c]\n", bp, (int) hsize, (halloc ? 'a' : 'f'), ((freelist*)bp)->next, ((freelist*)bp)->prev,(int) fsize, (falloc ? 'a' : 'f'));
+        bp = bp->next;
+    }
+    while(bp != NULL);
+}
+
+static void pb(void *bp) 
+{
+    uint32_t hsize, halloc, fsize, falloc;
+
+    hsize = GET_SIZE(HDRP(bp));
+    halloc = GET_ALLOC(HDRP(bp));  
+    fsize = GET_SIZE(FTRP(bp));
+    falloc = GET_ALLOC(FTRP(bp));  
+    printf("\n");
+    if(hsize == 0)
+    {
+        printf("%p: EOL\n", bp);
+        printf("%p: header: [%d:%c] (next [%p] prev [%p]) footer: [%d:%c]\n", bp, (int) hsize, (halloc ? 'a' : 'f'), ((freelist*)bp)->next, ((freelist*)bp)->prev,(int) fsize, (falloc ? 'a' : 'f'));
+        return;
+    }
+
+    printf("%p: header: [%d:%c] (next [%p] prev [%p]) footer: [%d:%c]\n", bp, (int) hsize, (halloc ? 'a' : 'f'), ((freelist*)bp)->next, ((freelist*)bp)->prev,(int) fsize, (falloc ? 'a' : 'f')); 
 }
