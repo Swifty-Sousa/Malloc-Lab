@@ -137,7 +137,7 @@ void *mm_malloc(uint32_t size)
 
   if(size <= DSIZE)
   {
-    size = DSIZE;
+    size = 2*DSIZE;
   }
   else if((size%DSIZE) != 0)
   {
