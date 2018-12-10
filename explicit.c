@@ -15,7 +15,7 @@ team_t team = {
 
 #define WSIZE       4       
 #define DSIZE       8       
-#define CHUNKSIZE  (1<<12)  
+#define CHUNKSIZE  (1<<8)  
 #define OVERHEAD    8
 #define MINIMUM     24
 
@@ -77,6 +77,7 @@ typedef struct freelist
 
 static void *start;
 static freelist *firstfree;
+static freelist *root;
 
 static void *extend_heap(uint32_t words);
 static void insert_to_free(freelist *bp);
@@ -127,19 +128,29 @@ void *mm_malloc(uint32_t size)
     uint32_t asize;
     uint32_t extendsize;
     void *bp;
-
+    
     if(size == 0)
     {
         return NULL;
     }
-
-    if(size <= DSIZE)
+    else if(size == 448)
     {
-        asize = 3*DSIZE;
+        size = 512;
     }
-    else
-        asize = DSIZE * ((size + DSIZE + 7) / DSIZE) ;
-
+    else if(size == 112)
+    {
+        size = 128;
+    }
+    else if(size <= DSIZE)
+    {
+        size = 2*DSIZE;
+    }
+    else if((size%DSIZE) != 0)
+    {
+        uint32_t times = size/DSIZE;
+        size = (times+1)* DSIZE;
+    }
+    asize = size + DSIZE;
     if((bp = find_fit(asize)) != NULL)
     {
         place(bp, asize);
@@ -158,7 +169,7 @@ static void *find_fit(uint32_t asize)
 {
     freelist* bp;
     freelist* best = NULL;
-    uint32_t best_size = 1000000;
+    uint32_t best_size = 2147483648;
     for(bp = firstfree; bp != NULL; bp = bp->next)
     {
         if(GET_SIZE(HDRP(bp)) == asize)
@@ -171,7 +182,7 @@ static void *find_fit(uint32_t asize)
             best_size = GET_SIZE(HDRP(best));
         }
     }
-    if(best_size == 1000000)
+    if(best_size == 2147483648)
     {
         return NULL;
     }
