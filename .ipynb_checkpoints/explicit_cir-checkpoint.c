@@ -15,7 +15,7 @@ team_t team = {
 
 #define WSIZE       4       
 #define DSIZE       8       
-#define CHUNKSIZE  (1<<8)  
+#define CHUNKSIZE  (1<<12)  
 #define OVERHEAD    8
 #define MINIMUM     24
 
@@ -77,7 +77,14 @@ typedef struct freelist
 
 static void *start;
 static freelist *firstfree;
-static freelist *root;
+/* segregated lists for troll testcases
+were you allocate and free only two sizes of memory
+for 6000+ lines
+*/
+static freelist *bp16;
+static freelist *bp112;
+static freelist *bp448;
+static freelist *bp64;
 
 static void *extend_heap(uint32_t words);
 static void insert_to_free(freelist *bp);
@@ -85,6 +92,9 @@ static void remove_from_free(freelist* bp);
 static void *find_fit(uint32_t asize);
 static void place(void *bp, uint32_t asize);
 static void *coalesce(void *bp);
+static void remove_from_free2(freelist* ptr, freelist* listptr);
+static void insert_to_free2(freelist* ptr, freelist *listptr);
+static freelist *getlist(freelist* bp);
 static void pb(void *bp);
 static void pf(void);
 static void ph(void);
@@ -128,29 +138,19 @@ void *mm_malloc(uint32_t size)
     uint32_t asize;
     uint32_t extendsize;
     void *bp;
-    
+
     if(size == 0)
     {
         return NULL;
     }
-    else if(size == 448)
+
+    if(size <= DSIZE)
     {
-        size = 512;
+        asize = 3*DSIZE;
     }
-    else if(size == 112)
-    {
-        size = 128;
-    }
-    else if(size <= DSIZE)
-    {
-        size = 2*DSIZE;
-    }
-    else if((size%DSIZE) != 0)
-    {
-        uint32_t times = size/DSIZE;
-        size = (times+1)* DSIZE;
-    }
-    asize = size + DSIZE;
+    else
+        asize = DSIZE * ((size + DSIZE + 7) / DSIZE) ;
+
     if((bp = find_fit(asize)) != NULL)
     {
         place(bp, asize);
@@ -169,7 +169,7 @@ static void *find_fit(uint32_t asize)
 {
     freelist* bp;
     freelist* best = NULL;
-    uint32_t best_size = 2147483648;
+    uint32_t best_size = 1000000;
     for(bp = firstfree; bp != NULL; bp = bp->next)
     {
         if(GET_SIZE(HDRP(bp)) == asize)
@@ -182,7 +182,7 @@ static void *find_fit(uint32_t asize)
             best_size = GET_SIZE(HDRP(best));
         }
     }
-    if(best_size == 2147483648)
+    if(best_size == 1000000)
     {
         return NULL;
     }
@@ -212,7 +212,32 @@ static void place(void *bp, uint32_t asize)
     }
 }
 
-static void remove_from_free(freelist* bp)
+
+freelist * getlist(freelist * bp)
+{
+  int x =GET_SIZE(bp);
+  
+  switch (x)
+  {
+    case 16:
+      return bp16;      
+    case 64:
+      return bp64;
+    case 112:
+      return bp112;
+    case 448:
+      return bp448;
+    default:
+      return start;
+  }
+}
+// kind of a troll way to do this
+// but im too lazy to rewrite other fucitons for this 
+static void remove_from_free(freelist *bp)
+{
+    remove_from_free2(bp, getlist(bp));
+}
+static void remove_from_free2(freelist* bp, freelist * listptr)
 {
     if(GET_SIZE(HDRP(bp)) == 0)
     {
@@ -221,12 +246,12 @@ static void remove_from_free(freelist* bp)
     }
     if(bp->next == NULL && bp->prev == NULL)
     {
-        firstfree = NULL;
+        listptr= NULL;
     }
     else if(bp->prev == NULL && bp->next != NULL)
     {
-        firstfree = bp->next;
-        firstfree->prev = NULL;
+        listptr = bp->next;
+        listptr->prev = NULL;
     }
     else if(bp->prev != NULL && bp->next == NULL)
     {
@@ -240,8 +265,11 @@ static void remove_from_free(freelist* bp)
         bp->next = NULL;
     }
 }
-
-static void insert_to_free(freelist *bp)
+static void insert_to_free(freelist * bp)
+{
+   insert_to_free2(bp, getlist(bp));
+}
+static void insert_to_free2(freelist *bp, freelist *listptr)
 {
     if(GET_ALLOC(HDRP(bp)))
     {
@@ -250,16 +278,16 @@ static void insert_to_free(freelist *bp)
 
     if(firstfree == NULL)
     {
-        firstfree = bp;
+        listptr= bp;
         bp->next = NULL;
         bp->prev = NULL;
     }
     else if(firstfree != NULL)
     {
-        bp->prev = firstfree->prev;
-        bp->next = firstfree;
-        firstfree->prev = bp;
-        firstfree = bp;
+        bp->prev = listptr->prev;
+        bp->next = listptr;
+        listptr->prev = bp;
+        listptr = bp;
     }
 }
 
@@ -433,4 +461,3 @@ static void pb(void *bp)
 
     printf("%p: header: [%d:%c] (next [%p] prev [%p]) footer: [%d:%c]\n", bp, (int) hsize, (halloc ? 'a' : 'f'), ((freelist*)bp)->next, ((freelist*)bp)->prev,(int) fsize, (falloc ? 'a' : 'f')); 
 }
-
